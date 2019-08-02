@@ -44,6 +44,12 @@ func main() {
 			fmt.Printf("error getting Auth client: %v\n", err)
 	}
 
+	queryDefaultDocument, err := firestoreClient.Collection("scriptengine-documents-defaults").Doc("document-default").Get(context.Background())
+
+	mapping := queryDefaultDocument.Data()
+
+	defaultDocumentData := mapping["data"].(string)
+
 	fmt.Printf("Setting up layers...\n")
 
 	jsonPresenter := presenters.JSONPresenter{}
@@ -59,16 +65,17 @@ func main() {
 		jsonPresenter,
 		userValidator,
 		docRepo,
+		defaultDocumentData,
 	}
 
 	r.NotFoundHandler = http.HandlerFunc(JSONHandler.NotFoundHandler)
 
 	r.HandleFunc("/", JSONHandler.IndexHandler).Methods("GET")
-	r.HandleFunc("/documents", JSONHandler.ListDocumentsHandler).Methods("GET")
-	r.HandleFunc("/document/{uuid}", JSONHandler.GetDocumentHandler).Methods("GET")
-	r.HandleFunc("/document/", JSONHandler.CreateDocumentHandler).Methods("POST")
-	r.HandleFunc("/document/{uuid}", JSONHandler.UpdateDocumentHandler).Methods("PUT")
-	r.HandleFunc("/document/{uuid}", JSONHandler.DeleteDocumentHandler).Methods("DELETE")
+	r.HandleFunc("/documents", JSONHandler.CORSWrapper(JSONHandler.ListDocumentsHandler)).Methods("GET", "OPTIONS")
+	r.HandleFunc("/document/{uuid}", JSONHandler.CORSWrapper(JSONHandler.GetDocumentHandler)).Methods("GET", "OPTIONS")
+	r.HandleFunc("/document/", JSONHandler.CORSWrapper(JSONHandler.CreateDocumentHandler)).Methods("POST", "OPTIONS")
+	r.HandleFunc("/document/{uuid}", JSONHandler.CORSWrapper(JSONHandler.UpdateDocumentHandler)).Methods("PUT", "OPTIONS")
+	r.HandleFunc("/document/{uuid}", JSONHandler.DeleteDocumentHandler).Methods("DELETE", "OPTIONS")
 
 	// r.HandleFunc("/look/{name}", JSONHandler.GetPublicURL).Methods("GET")
 	// r.HandleFunc("/give", JSONHandler.UploadUserFile).Methods("POST")

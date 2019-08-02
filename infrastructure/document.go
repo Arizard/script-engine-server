@@ -18,7 +18,7 @@ type FirebaseDocumentRepository struct {
 func (repo FirebaseDocumentRepository) List(uid string) []entities.Document {
 	docs := []entities.Document{}
 
-	docsQuery := repo.Client.Collection("scriptengine-documents").Where("owner", "==", uid).Documents(context.Background())
+	docsQuery := repo.Client.Collection("scriptengine-documents").Where("owner", "==", uid).OrderBy("title", firestore.Asc).Documents(context.Background())
 
 	for {
 		doc, err := docsQuery.Next()
@@ -26,7 +26,8 @@ func (repo FirebaseDocumentRepository) List(uid string) []entities.Document {
 			break
 		}
 		if err != nil {
-				break
+			log.Fatalf("error while iterating query: %s", err)
+			break
 		}
 		mapping := doc.Data()
 		docs = append(
@@ -43,6 +44,7 @@ func (repo FirebaseDocumentRepository) List(uid string) []entities.Document {
 
 	return docs
 }
+
 
 func (repo FirebaseDocumentRepository) Add(doc entities.Document) string {
 	
@@ -61,16 +63,43 @@ func (repo FirebaseDocumentRepository) Add(doc entities.Document) string {
 		},
 	)
 	if err != nil {
-		log.Fatalf("error while writing to cloud firestore: %s", err)
+		log.Printf("error while writing to cloud firestore: %s", err)
 	}
 	return _uuid.String()
 }
 
-func (repo FirebaseDocumentRepository) Get(_uuid string) entities.Document {
-	return entities.Document{}
+func (repo FirebaseDocumentRepository) Get(_uuid string) (*entities.Document, error) {
+	query, err := repo.Client.Collection("scriptengine-documents").Doc(_uuid).Get(context.Background())
+	if err != nil {
+		log.Printf("error while reading from cloud firestore: %s", err)
+		return nil, err
+	}
+
+	mapping := query.Data()
+
+	return &entities.Document{
+		Name: mapping["name"].(string),
+		Title: mapping["title"].(string),
+		Owner: mapping["owner"].(string),
+		Data: mapping["data"].(string),
+		UUID: mapping["uuid"].(string),
+	}, nil
 }
 
 func (repo FirebaseDocumentRepository) Update(_uuid string, doc *entities.Document) {
+	_, err := repo.Client.Collection("scriptengine-documents").Doc(_uuid).Set(
+		context.Background(),
+		map[string]interface{}{
+			"name": doc.Name,
+			"title": doc.Title,
+			"data": doc.Data,
+			"owner": doc.Owner,
+			"uuid": _uuid,
+		},
+	)
+	if err != nil {
+		log.Printf("error while writing to cloud firestore: %s", err)
+	}
 	return
 }
 

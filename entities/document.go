@@ -32,7 +32,7 @@ func (s *DocumentService) NewDocument(name string, title string, data string) Do
 type DocumentRepository interface {
 	List(userUUID string) []Document
 	Add(Document Document) string
-	Get(_uuid string) Document
+	Get(_uuid string) (*Document, error)
 	Update(_uuid string, Document *Document)
 	Delete(_uuid string)
 }

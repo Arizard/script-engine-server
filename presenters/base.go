@@ -12,7 +12,7 @@ type Presenter interface {
 	Index() string
 	ListDocuments([]entities.Document) string
 	CreateDocument(string) string
-	GetDocument() string
+	GetDocument(entities.Document) string
 	UpdateDocument() string
 	DeleteDocument() string
 }

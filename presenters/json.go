@@ -46,7 +46,7 @@ func (JSONPresenter) ListDocuments(docs []entities.Document) string {
 				"name": doc.Name,
 				"title": doc.Title,
 				"owner": doc.Owner,
-				"data": doc.Data,
+				"data": "(omitted by presenter)",
 				"uuid": doc.UUID,
 			},
 		)
@@ -77,8 +77,22 @@ func (JSONPresenter) CreateDocument(uuid string) string {
 }
 
 // GetDocument retrieves the record of a document by the uuid.
-func (JSONPresenter) GetDocument() string {
-	return "{ message: \"GetDocument\" }"
+func (JSONPresenter) GetDocument(doc entities.Document) string {
+	mapping := map[string]interface{}{
+		"name": doc.Name,
+		"title": doc.Title,
+		"owner": doc.Owner,
+		"data": doc.Data,
+		"uuid": doc.UUID,
+	}
+
+	data, err := json.Marshal(mapping)
+
+	if err != nil {
+		return fmt.Sprintf("An error occured while marshalling: %s", err)
+	}
+
+	return string(data)
 }
 
 func (JSONPresenter) UpdateDocument() string {

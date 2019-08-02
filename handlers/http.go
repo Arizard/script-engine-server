@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"io/ioutil"
+	"log"
 	// "encoding/json"
 	"github.com/arizard/script-engine-server/presenters"
 	"github.com/arizard/script-engine-server/auth"
 	"github.com/arizard/script-engine-server/entities"
-	// "github.com/gorilla/mux"
+	"github.com/gorilla/mux"
 	"net/http"
 	"fmt"
 	"github.com/arizard/script-engine-server/usecases"
@@ -25,6 +27,7 @@ type Handler struct {
 	Presenter presenters.Presenter
 	UserValidator auth.UserValidator
 	DocumentRepository entities.DocumentRepository
+	DefaultDocumentData string
 }
 
 func (handler Handler) VerifyRequest(r *http.Request, verifyFunc func(string) bool) bool {
@@ -35,10 +38,31 @@ func (handler Handler) VerifyRequest(r *http.Request, verifyFunc func(string) bo
 	return verifyFunc(token) 
 }
 
+func (handler Handler) CORSWrapper(hf func (http.ResponseWriter, *http.Request)) func (http.ResponseWriter, *http.Request) {
+	return func (w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", handler.ContentType)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cache-Control")
+		w.Header().Set("Access-Control-Expose-Headers", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		if (r.Method == "OPTIONS") {
+			log.Printf("incoming CORS request")
+		} else {
+			log.Printf("incoming request")
+			w.Header().Set("Content-Type", handler.ContentType)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization")
+			hf(w, r)
+		}
+	}
+	
+}
+
 
 // NotFoundHandler handles 404s
 func (handler Handler) NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", handler.ContentType)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(404)
 	fmt.Fprintf(w, handler.Presenter.NotFound())
 }
@@ -46,6 +70,7 @@ func (handler Handler) NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 // ForbiddenHandler handles 403s
 func (handler Handler) ForbiddenHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", handler.ContentType)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(403)
 	fmt.Fprintf(w, handler.Presenter.Forbidden())
 }
@@ -53,6 +78,7 @@ func (handler Handler) ForbiddenHandler(w http.ResponseWriter, r *http.Request) 
 // InternalServerErrorHandler handles 500s
 func (handler Handler) InternalServerErrorHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", handler.ContentType)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(500)
 	fmt.Fprintf(w, handler.Presenter.InternalServerError())
 }
@@ -60,6 +86,7 @@ func (handler Handler) InternalServerErrorHandler(w http.ResponseWriter, r *http
 // IndexHandler handles a request for the Index view of the presenter.
 func (handler Handler) IndexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", handler.ContentType)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	fmt.Fprintf(w, handler.Presenter.Index())
 }
 
@@ -68,6 +95,7 @@ func (handler Handler) ListDocumentsHandler(w http.ResponseWriter, r *http.Reque
 	verified := handler.VerifyRequest(r, handler.UserValidator.CanListDocuments)
 	if (verified == false){
 		handler.ForbiddenHandler(w, r)
+		log.Printf("user is forbidden to access.")
 		return
 	}
 
@@ -84,8 +112,7 @@ func (handler Handler) ListDocumentsHandler(w http.ResponseWriter, r *http.Reque
 
 	uc.Setup()
 	uc.Execute()
-	
-	w.Header().Set("Content-Type", handler.ContentType)
+
 	fmt.Fprintf(w, rc.Response.Body)
 }
 
@@ -103,10 +130,10 @@ func (handler Handler) CreateDocumentHandler(w http.ResponseWriter, r *http.Requ
 	rc := usecases.ResponseCollector{}
 	uc := usecases.CreateDocument{
 		handler.DocumentRepository,
-		"TestName",
-		"TestTitle",
+		"no_name",
+		"New Document",
 		uid,
-		"TestData",		
+		handler.DefaultDocumentData,	
 		&rc,
 	}
 
@@ -123,8 +150,30 @@ func (handler Handler) GetDocumentHandler(w http.ResponseWriter, r *http.Request
 		handler.ForbiddenHandler(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", handler.ContentType)
-	fmt.Fprintf(w, handler.Presenter.GetDocument())
+
+	idToken, _ := authtoken.FromRequest(r)
+	uid := handler.UserValidator.GetUserRef(idToken)
+
+	docUUID := mux.Vars(r)["uuid"]
+
+	rc := usecases.ResponseCollector{}
+	uc := usecases.GetDocument{
+		handler.DocumentRepository,
+		uid,
+		docUUID,
+		handler.Presenter.GetDocument,
+		&rc,
+	}
+
+	uc.Setup()
+	uc.Execute()
+
+	if rc.Error != nil {
+		handler.NotFoundHandler(w, r)
+		return
+	}
+	
+	fmt.Fprintf(w, rc.Response.Body)
 }
 
 func (handler Handler) UpdateDocumentHandler(w http.ResponseWriter, r *http.Request) {
@@ -133,8 +182,33 @@ func (handler Handler) UpdateDocumentHandler(w http.ResponseWriter, r *http.Requ
 		handler.ForbiddenHandler(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", handler.ContentType)
-	fmt.Fprintf(w, handler.Presenter.UpdateDocument())
+
+	idToken, _ := authtoken.FromRequest(r)
+	uid := handler.UserValidator.GetUserRef(idToken)
+
+	docUUID := mux.Vars(r)["uuid"]
+
+	docJSON, _ := ioutil.ReadAll(r.Body)
+
+	rc := usecases.ResponseCollector{}
+	uc := usecases.UpdateDocument{
+		handler.DocumentRepository,
+		uid,
+		docUUID,
+		docJSON,
+		handler.Presenter.UpdateDocument,
+		&rc,
+	}
+
+	uc.Setup()
+	uc.Execute()
+
+	if rc.Error != nil {
+		handler.InternalServerErrorHandler(w, r)
+		return
+	}
+	
+	fmt.Fprintf(w, rc.Response.Body)
 }
 
 func (handler Handler) DeleteDocumentHandler(w http.ResponseWriter, r *http.Request) {
