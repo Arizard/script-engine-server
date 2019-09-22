@@ -5,16 +5,17 @@ import (
 	"fmt"
 	// "cloud.google.com/go/storage"
 	// "io/ioutil"
+	"log"
+	"net/http"
+
+	"cloud.google.com/go/firestore"
+	firebase "firebase.google.com/go"
 	"github.com/arizard/script-engine-server/auth"
-	"github.com/arizard/script-engine-server/presenters"
 	"github.com/arizard/script-engine-server/handlers"
 	"github.com/arizard/script-engine-server/infrastructure"
-	"net/http"
+	"github.com/arizard/script-engine-server/presenters"
 	"github.com/gorilla/mux"
-	firebase "firebase.google.com/go"
 	"golang.org/x/net/context"
-	"cloud.google.com/go/firestore"
-	"log"
 )
 
 func main() {
@@ -24,10 +25,10 @@ func main() {
 
 	app, err := firebase.NewApp(context.Background(), nil)
 	if err != nil {
-			fmt.Errorf("error initializing app: %v", err)
+		fmt.Errorf("error initializing app: %v", err)
 	}
 
-	projectID := "scriptengine-f031b"
+	projectID := "probable-spoon"
 
 	// Get a Firestore client.
 	ctx := context.Background()
@@ -41,11 +42,16 @@ func main() {
 
 	authClient, err := app.Auth(context.Background())
 	if err != nil {
-			fmt.Printf("error getting Auth client: %v\n", err)
+		fmt.Printf("error getting Auth client: %v\n", err)
 	}
 
-	queryDefaultDocument, err := firestoreClient.Collection("scriptengine-documents-defaults").Doc("document-default").Get(context.Background())
+	fmt.Println("Check")
 
+	queryDefaultDocument, err := firestoreClient.Collection("documents").Doc("default-document").Get(context.Background())
+
+	if err != nil {
+		log.Fatalf("An error occured. %v\n", err)
+	}
 	mapping := queryDefaultDocument.Data()
 
 	defaultDocumentData := mapping["data"].(string)
@@ -84,6 +90,5 @@ func main() {
 	// r.PathPrefix("/static/").Handler(fs)
 
 	http.ListenAndServe(":8080", r)
-
 
 }
